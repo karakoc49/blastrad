@@ -1,0 +1,96 @@
+# Bu örnek dosya güvenlik açısından sorunlu bir pipeline'ı simüle eder.
+# blastrad bu dosyayı analiz edip sorunları bulacak.
+
+stages:
+  - build
+  - test
+  - deploy
+
+# Global değişkenler — tüm job'lara görünür
+variables:
+  APP_ENV: production
+  REGISTRY: registry.example.com
+
+# -------------------------------------------------------
+# BUILD JOB
+# Güvenli görünüyor ama shared runner kullanıyor.
+# -------------------------------------------------------
+build-app:
+  stage: build
+  image: golang:1.22
+  tags:
+    - shared # paylaşımlı runner — başka projelerle aynı runner
+  script:
+    - go build -o app ./...
+  artifacts:
+    paths:
+      - app
+    expire_in: 1 hour
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: always
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: always
+
+# -------------------------------------------------------
+# TEST JOB
+# Normal görünüyor.
+# -------------------------------------------------------
+run-tests:
+  stage: test
+  image: golang:1.22
+  needs:
+    - job: build-app
+      artifacts: true
+  script:
+    - go test ./...
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: always
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: always
+
+# -------------------------------------------------------
+# DEPLOY JOB — KRİTİK GÜVENLİK SORUNU
+# Fork'tan gelen MR da bu job'u tetikleyebilir!
+# Ve bu job production K8s cluster'ına erişiyor.
+# -------------------------------------------------------
+deploy-production:
+  stage: deploy
+  image: bitnami/kubectl:latest
+  tags:
+    - shared # hâlâ shared runner — production için tehlikeli
+  needs:
+    - job: run-tests
+      artifacts: false
+  variables:
+    # Bu secret tüm MR pipeline'larına da inject ediliyor
+    K8S_TOKEN: $KUBE_PROD_TOKEN
+    DB_PASSWORD: $PRODUCTION_DB_PASS
+  environment:
+    name: production
+    url: https://app.example.com
+  script:
+    - kubectl --token=$K8S_TOKEN apply -f k8s/
+    - kubectl rollout status deployment/app
+  # SORUN: merge_request_event kuralı var
+  # fork'tan MR açan biri bu job'u tetikleyebilir
+  # ve K8S_TOKEN'a erişebilir
+  rules:
+    - if: "$CI_MERGE_REQUEST_IID"
+      when: always
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: always
+
+# -------------------------------------------------------
+# CLEANUP JOB — eski syntax kullanan örnek
+# -------------------------------------------------------
+cleanup-old-images:
+  stage: deploy
+  image: docker:latest
+  only:
+    - main
+    - schedules
+  script:
+    - docker image prune -f
+  allow_failure: true
