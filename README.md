@@ -270,7 +270,9 @@ Both Personal Access Tokens and Project Access Tokens work.
 
 ## License
 
-MIT
+This project is distributed under the [AGPL-3.0](LICENSE) license.
+
+For commercial use or private licensing: haluk.mkarakoc@gmail.com
 
 ---
 
