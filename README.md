@@ -2,6 +2,8 @@
 
 **CI/CD Pipeline Attack Path Analyzer for GitLab**
 
+![blastrad Gopher](https://i.imgur.com/HAeXwm4.png)
+
 blastrad models your GitLab CI/CD pipeline as a directed security graph and finds attack paths from untrusted sources to critical targets. It answers the question: *"If someone opens a fork merge request, what secrets and environments can they reach?"*
 
 ```
